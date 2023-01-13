@@ -1,0 +1,210 @@
+---
+title: "Heart Attack Analysis & Prediction"
+author: "Adrià Jaraba Currius, Àlex López Diaz"
+date: "2023-01-09"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+# 1. Descripció del dataset
+
+```{r,eval=TRUE,echo=TRUE}
+# Llibreries
+#if(!require("corrplot")) install.packages("corrplot")
+library("corrplot")
+library("magrittr")
+library("dplyr")
+library("stats")
+
+```
+
+
+```{r,eval=TRUE,echo=TRUE}
+# Carreguem l'arxiu.
+ds <- read.csv("heart.csv", sep=",")
+# Resum de variables.
+summary(ds)
+str(ds)
+```
+# 2. Integració i selecció
+
+```{r,eval=TRUE,echo=TRUE}
+# Creació de matriu de correlació.
+factors= ds
+res<-cor(factors)
+corrplot(res,method="color",tl.col="black", tl.srt=30, order = "AOE", 
+   number.cex=0.5,tl.cex=0.5,sig.level = 0.01, addCoef.col = "black")
+```
+
+Traiem les columnes que no aporten res
+```{r}
+ds <- ds %>% select(-chol)
+ds <- ds %>% select(-fbs)
+```
+
+# 3. Neteja de les dades
+
+## 3.1. Valors NULL
+
+Comprovació de NULL
+```{r,eval=TRUE,echo=TRUE}
+# Comprovació de valors NULL.
+colSums(is.na(ds))
+```
+
+## 3.2. Valors extrem
+
+```{r}
+sd_age<-mean(ds$age,na.rm=T)+2*sd(ds$age,na.rm=T)
+sd_age
+
+hist(ds$age, main = "Histograma edat", xlab = "Edat (anys)")
+abline(v=sd_age,col="red")
+```
+
+Boxplot de totes les variables
+```{r}
+par(mfrow=c(1,3))
+for(col_name in colnames(ds)){
+  boxplot(ds[,col_name], xlab = col_name)
+}
+```
+
+Neteja final, ens desfem dels outliers
+
+```{r}
+ds <- ds[!ds$trtbps %in% boxplot.stats(ds$trtbps)$out,]
+ds <- ds[!ds$oldpeak %in% boxplot.stats(ds$oldpeak)$out,]   
+ds <- ds[!ds$caa %in% boxplot.stats(ds$caa)$out,]   
+ds <- ds[!ds$thall %in% boxplot.stats(ds$thall)$out,] 
+ds <- ds[!ds$thalachh %in% boxplot.stats(ds$thalachh)$out,] 
+summary(ds)
+```
+
+```{r}
+# Boxplot de les anteriors variables
+par(mfrow=c(1,5))
+boxplot(ds$trtbps, xlab = "$trtbps")
+boxplot(ds$oldpeak, xlab = "$oldpeak")
+boxplot(ds$caa, xlab = "$caa")
+boxplot(ds$thall, xlab = "$thall")
+boxplot(ds$thalachh, xlab = "$thalachh")
+```
+
+# 4. Anàlisi de les dades
+
+## 4.1. Selecció de dades per analitzar
+Agafem les columnes més significatives envers la variable target.
+```{r}
+result <- abs(as.data.frame(res)[c("output")])
+print(filter(result, output > 0.35))
+```
+
+```{r}
+ds_final <- ds[c("output","cp","thalachh","exng","oldpeak","caa")]
+print(head(ds_final))
+```
+
+
+
+Transformació a factor de les variables categòriques.
+```{r}
+#ds_final$output <- factor(ds_final$output, labels=c("Risc menor","Risc major"))
+ds_final$exng <- factor(ds_final$exng, labels=c("No","Si"))
+ds_final$cp <- factor(ds_final$cp, labels=c("angina tipica","angina atipica","dolor no anginós","asimptomàtic"))
+summary(ds_final)
+```
+
+
+
+## 4.2. Normalitat i homogeneïtat de la variància
+
+Normalitat
+Comprovació de les variables numèriques.
+```{r}
+qqnorm(ds$thalachh)
+qqline(ds$thalachh,col=2)
+
+# En cas de ser necessari, apliquem el test de Shapiro.
+shapiro.test(ds$thalachh)
+
+```
+
+```{r}
+qqnorm(ds$oldpeak)
+qqline(ds$oldpeak,col=2)
+
+# En cas de ser necessari, apliquem el test de Shapiro.
+shapiro.test(ds$oldpeak)
+```
+
+Homogeneïtat de la variància
+```{r}
+fligner.test(output ~ thalachh, data = ds)
+fligner.test(output ~ oldpeak, data = ds)
+fligner.test(output ~ caa, data = ds)
+fligner.test(output ~ cp, data = ds)
+fligner.test(output ~ exng, data = ds)
+```
+
+## 4.3. Proves estadístiques
+Wilcoxon test per a variables dicotòmiques.
+```{r}
+# Variable exng
+wilcox.test(ds_final$output~ds_final$exng)
+```
+
+Test Kruskal-Wallis per a categòriques amb un nombre >2 de dades.
+```{r}
+# Variable cp
+kruskal.test(ds_final$output~ds_final$cp)
+```
+
+correlació de Spearman per a dades numèriques.
+```{r}
+cor.test(ds_final$output,ds_final$thalachh,method="spearman")
+cor.test(ds_final$output,ds_final$oldpeak,method="spearman")
+cor.test(ds_final$output,ds_final$caa,method="spearman")
+```
+
+```{r}
+summary(ds_final)
+```
+
+# 5. Representació dels resultats
+
+```{r}
+output_desc <- c("Risc menor","Risc major")
+ds_final$output <- factor(ds_final$output, labels=output_desc)
+exng_desc <- c("No","Si")
+ds_final$exng <- factor(ds_final$exng, labels=exng_desc)
+cp_desc <- c("angina tipica","angina atipica","dolor no anginós","asimptomàtic")
+ds_final$cp <- factor(ds_final$cp, labels=cp_desc)
+caa_desc <- c("0 vasos principals","1 vas principals","2 vasos principals")
+ds_final$caa <- factor(ds_final$caa, labels=caa_desc)
+```
+
+
+```{r}
+barplot(table(ds_final$cp,ds_final$output), col = heat.colors(4), xlab = "output values", ylab = "cp values")
+legend("topleft",legend = cp_desc,fill = heat.colors(4), border = "black", cex = 0.7)
+
+boxplot(ds_final$output,ds_final$thalachh, xlab = "output values", ylab = "thalachh values", names = output_desc)
+
+barplot(table(ds_final$exng,ds_final$output), col = heat.colors(2), xlab = "output values", ylab = "exng values")
+legend("topleft",legend = exng_desc,fill = heat.colors(2), border = "black")
+
+boxplot(ds_final$output,ds_final$oldpeak, xlab = "output values", ylab = "oldpeak values", names = output_desc)
+
+barplot(table(ds_final$caa, ds_final$output), col = heat.colors(3), xlab = "output values", ylab = "caa values")
+legend("topleft",legend = caa_desc,fill = heat.colors(3), border = "black")
+```
+
+Importem el ds de les dades analitzades.
+```{r}
+#install.packages("writexl")
+#library("writexl")
+#write.csv(ds_final, "C:/.../ds_final.csv", row.names = FALSE)
+```
