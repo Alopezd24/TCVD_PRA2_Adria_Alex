@@ -5,6 +5,7 @@ Codi font en R
 
 ## csv
 heart.csv - Dataset original
+
 ds_final.csv - Output del dataset final transformat
 
 ## Memòria de la pràctica
